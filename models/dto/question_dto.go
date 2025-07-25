@@ -57,7 +57,7 @@ type UpdateQuestionReq struct {
 	Keywords     string             `json:"keywords"`
 }
 
-// QuestionRes 生成题目以及查询题目列表返回结构体
+// QuestionRes 查询题目列表返回结构体
 type QuestionRes struct {
 	ID int `json:"id"`
 	Question
@@ -68,4 +68,13 @@ type QuestionRes struct {
 	CreateAt     string `json:"created_at"`
 	UserName     string `json:"username"`
 	UserID       int    `json:"user_id"`
+}
+
+// GenerateQuestionRes 生成题目返回结构体
+type GenerateQuestionRes struct {
+	Question
+	QuestionType string `json:"question_type"`
+	Language     string `json:"language"`
+	Keywords     string `json:"keywords"`
+	AiModel      string `json:"ai_model"`
 }

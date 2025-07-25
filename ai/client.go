@@ -3,6 +3,7 @@ package ai
 import (
 	"aiquiz/config"
 	"aiquiz/models/dto"
+	"aiquiz/utils/enums"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -57,8 +58,14 @@ func GenerateQuestions(aiModel, language, questionType, keywords string, count i
 		return nil, err
 	}
 
-	// 解析API响应
-	cleanedJson, err := parseApiResponse(respBody)
+	// 根据不同的模型解析API响应
+	var cleanedJson string
+	switch aiModel {
+	case string(enums.AiModelQwenPlus):
+		cleanedJson, err = parseQwenApiResponse(respBody)
+	case string(enums.AiModelDeepSeek):
+		cleanedJson, err = parseV3ApiResponse(respBody)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +106,7 @@ func buildPrompt(language, questionType, keywords string, count int) (string, er
        { "content": "选项内容", "value": 8 }
      ],
      "answer": 2,  // 正确选项的value值（仅一个正确选项）
-     "explanation": "详细解释正确答案的原因及错误选项的问题"
+     "explanation": "详细解释正确答案的原因及错误选项的问题，不要包含value等信息"
    }
 
 2. 内容要求：
@@ -108,13 +115,12 @@ func buildPrompt(language, questionType, keywords string, count int) (string, er
    - 每个题目必须有4个选项
    - 选项应具有迷惑性，避免明显错误
    - 题目相互独立，不得重复
-   - 难度适中
 
 3. 格式约束：
    - 确保JSON格式完全正确
    - 选项value严格遵循2的次幂规则
    - answer字段必须是唯一正确选项的value值
-   - 不允许包含任何Markdown格式标记`,
+   - 特别注意: 不允许包含任何Markdown格式标记，如标识json的代码块`,
 			count, language, questionTypeName, keywords,
 			language, keywords, questionTypeName), nil
 	}
@@ -134,7 +140,7 @@ func buildPrompt(language, questionType, keywords string, count int) (string, er
        { "content": "选项内容", "value": 8 }
      ],
      "answer": 7,  // 正确选项的value之和（至少2个正确选项）
-     "explanation": "详细解释正确答案的原因及错误选项的问题"
+     "explanation": "详细解释正确答案的原因及错误选项的问题，不要包含value等信息"
    }
 
 2. 内容要求：
@@ -143,13 +149,12 @@ func buildPrompt(language, questionType, keywords string, count int) (string, er
    - 每个题目必须有4个选项
    - 选项应具有迷惑性，避免明显错误
    - 题目相互独立，不得重复
-   - 难度适中
 
 3. 格式约束：
    - 确保JSON格式完全正确
    - 选项value严格遵循2的次幂规则
    - answer字段必须是所有正确选项的value总和
-   - 不允许包含任何Markdown格式标记`,
+   - 特别注意: 不允许包含任何Markdown格式标记,如标识json的代码块`,
 		count, language, questionTypeName, keywords,
 		language, keywords, questionTypeName), nil
 }
@@ -176,7 +181,7 @@ func buildRequestBody(aiModel, language, questionType, prompt string) RequestBod
 			},
 		},
 		Parameters: Parameters{
-			ResultFormat: "json",
+			ResultFormat: "message",
 		},
 	}
 }
@@ -219,8 +224,8 @@ func sendRequest(requestBody RequestBody) ([]byte, error) {
 	return bodyText, nil
 }
 
-// 解析API响应
-func parseApiResponse(bodyText []byte) (string, error) {
+// qwen响应解析
+func parseQwenApiResponse(bodyText []byte) (string, error) {
 	var apiResponse struct {
 		Output struct {
 			Text string `json:"text"`
@@ -232,6 +237,28 @@ func parseApiResponse(bodyText []byte) (string, error) {
 	}
 
 	return apiResponse.Output.Text, nil
+}
+
+// DeepSeek-V3的响应解析
+func parseV3ApiResponse(bodyText []byte) (string, error) {
+	var apiResponse struct {
+		Output struct {
+			Choices []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(bodyText, &apiResponse); err != nil {
+		return "", fmt.Errorf("解析API响应失败: %v，响应内容: %s", err, string(bodyText))
+	}
+	// 检查是否有返回结果
+	if len(apiResponse.Output.Choices) == 0 {
+		return "", fmt.Errorf("API响应中没有找到有效内容，响应内容: %s", string(bodyText))
+	}
+	// 返回第一个选择的内容
+	return apiResponse.Output.Choices[0].Message.Content, nil
 }
 
 // 解析题目数组

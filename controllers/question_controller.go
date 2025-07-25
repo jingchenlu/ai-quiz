@@ -50,12 +50,17 @@ func (q *QuestionController) GenerateQuestion(c *gin.Context) {
 	// 调用ai模型
 	generatedQuestions, err := ai.GenerateQuestions(string(req.AiModel), req.Language, string(req.QuestionType), req.Keywords, req.Count)
 	// 应该重试
-	if err != nil || generatedQuestions == nil || len(generatedQuestions.Questions) == 0 {
-		utils.FailMsg(c, utils.ERROR_AI_GENERATE, "生成题目失败")
+	if err != nil {
+		utils.FailMsg(c, utils.ERROR_AI_GENERATE, "生成题目失败"+err.Error())
+		return
 	}
-	var questionResponseList []dto.QuestionRes
+	if generatedQuestions == nil || len(generatedQuestions.Questions) == 0 {
+		utils.FailMsg(c, utils.ERROR_AI_GENERATE, "生成题目失败,请重试")
+		return
+	}
+	var questionResponseList []dto.GenerateQuestionRes
 	for _, question := range generatedQuestions.Questions {
-		questionRes := dto.QuestionRes{
+		questionRes := dto.GenerateQuestionRes{
 			Question:     question,
 			QuestionType: string(req.QuestionType),
 			Language:     req.Language,
